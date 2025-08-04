@@ -116,41 +116,61 @@ async def get_export_info():
             "session_info": session_status
         }
         
-        # 获取全部任务统计
-        try:
-            all_tasks_result = await dida_service.get_all_tasks()
-            if all_tasks_result and 'error' not in all_tasks_result:
-                tasks = all_tasks_result.get('syncTaskBean', {}).get('update', [])
-                stats["all_tasks_count"] = len(tasks)
-        except Exception as e:
-            app_logger.warning(f"获取全部任务统计失败: {e}")
+        # 并发获取各类任务统计，提高性能
+        import asyncio
         
-        # 获取已完成任务统计（只获取第一页用于统计）
-        try:
-            completed_result = await dida_service.get_completed_tasks(None, "Completed")
-            if completed_result and 'error' not in completed_result:
-                if isinstance(completed_result, list):
-                    stats["completed_tasks_count"] = len(completed_result)
-        except Exception as e:
-            app_logger.warning(f"获取已完成任务统计失败: {e}")
-
-        # 获取放弃任务统计
-        try:
-            abandoned_tasks_result = await dida_service.get_completed_tasks(None, "Abandoned")
-            if abandoned_tasks_result and 'error' not in abandoned_tasks_result:
-                if isinstance(abandoned_tasks_result, list):
-                    stats["abandoned_tasks_count"] = len(abandoned_tasks_result)
-        except Exception as e:
-            app_logger.warning(f"获取放弃任务统计失败: {e}")
-
-        # 获取垃圾桶任务统计
-        try:
-            trash_result = await dida_service.get_trash_tasks()
-            if trash_result and 'error' not in trash_result:
-                tasks = trash_result.get('tasks', [])
-                stats["trash_tasks_count"] = len(tasks)
-        except Exception as e:
-            app_logger.warning(f"获取垃圾桶任务统计失败: {e}")
+        async def get_all_tasks_count():
+            try:
+                result = await dida_service.get_all_tasks()
+                if result and 'error' not in result:
+                    tasks = result.get('syncTaskBean', {}).get('update', [])
+                    return len(tasks)
+            except Exception as e:
+                app_logger.warning(f"获取全部任务统计失败: {e}")
+            return 0
+        
+        async def get_completed_tasks_count():
+            try:
+                result = await dida_service.get_completed_tasks(None, "Completed")
+                if result and 'error' not in result and isinstance(result, list):
+                    return len(result)
+            except Exception as e:
+                app_logger.warning(f"获取已完成任务统计失败: {e}")
+            return 0
+            
+        async def get_abandoned_tasks_count():
+            try:
+                result = await dida_service.get_completed_tasks(None, "Abandoned")
+                if result and 'error' not in result and isinstance(result, list):
+                    return len(result)
+            except Exception as e:
+                app_logger.warning(f"获取放弃任务统计失败: {e}")
+            return 0
+            
+        async def get_trash_tasks_count():
+            try:
+                result = await dida_service.get_trash_tasks()
+                if result and 'error' not in result:
+                    tasks = result.get('tasks', [])
+                    return len(tasks)
+            except Exception as e:
+                app_logger.warning(f"获取垃圾桶任务统计失败: {e}")
+            return 0
+        
+        # 并发执行所有统计任务
+        counts = await asyncio.gather(
+            get_all_tasks_count(),
+            get_completed_tasks_count(), 
+            get_abandoned_tasks_count(),
+            get_trash_tasks_count(),
+            return_exceptions=True
+        )
+        
+        # 处理结果，即使部分失败也能继续
+        stats["all_tasks_count"] = counts[0] if not isinstance(counts[0], Exception) else 0
+        stats["completed_tasks_count"] = counts[1] if not isinstance(counts[1], Exception) else 0
+        stats["abandoned_tasks_count"] = counts[2] if not isinstance(counts[2], Exception) else 0
+        stats["trash_tasks_count"] = counts[3] if not isinstance(counts[3], Exception) else 0
         
         app_logger.info(f"任务统计获取完成: {stats}")
         return stats

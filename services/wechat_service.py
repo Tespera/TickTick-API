@@ -4,7 +4,7 @@ import uuid
 from typing import Optional, Dict, Any, Tuple
 import httpx
 from utils import app_logger
-from core import config, db, urls
+from core import config, db, urls, http_client_manager
 from models import WeChatQRResponse, WeChatValidateResponse, PasswordLoginRequest
 
 
@@ -13,7 +13,7 @@ class WeChatLoginService:
     
     def __init__(self):
         self.request_config = config.get('request_config', {})
-        self.client = httpx.AsyncClient(timeout=self.request_config.get('timeout', 30.0))
+        self.client = http_client_manager.client
     
     async def get_qr_code(self, state: str = "Lw==") -> Optional[WeChatQRResponse]:
         """
@@ -447,8 +447,9 @@ class WeChatLoginService:
             return {'error': str(e)}
 
     async def close(self):
-        """关闭HTTP客户端"""
-        await self.client.aclose()
+        """关闭HTTP客户端 - 使用共享客户端时无需关闭"""
+        # HTTP客户端由http_client_manager统一管理，无需在此关闭
+        pass
 
 
 # 全局微信登录服务实例

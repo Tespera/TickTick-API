@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from core import config, db
+from core import config, db, http_client_manager
 from routers import auth, tasks, system, projects, statistics, pomodoros, habits, users, export
 from services import wechat_service
 from utils import app_logger
@@ -28,6 +28,8 @@ async def lifespan(app: FastAPI):
     # 关闭时执行
     app_logger.info("滴答清单API服务关闭中...")
     await wechat_service.close()
+    await http_client_manager.close()
+    db.close_connection()
     app_logger.info("服务已关闭")
 
 

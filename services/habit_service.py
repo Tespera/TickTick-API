@@ -2,7 +2,7 @@
 import httpx
 from typing import Optional
 from utils import app_logger
-from core import urls
+from core import urls, http_client_manager
 # 不再使用响应模型，直接返回原始响应
 
 
@@ -10,7 +10,7 @@ class HabitService:
     """习惯管理服务类"""
     
     def __init__(self):
-        self.client = httpx.AsyncClient(timeout=30.0)
+        self.client = http_client_manager.client
     
     def _build_auth_headers(self, auth_token: str, csrf_token: str) -> dict:
         """构建认证请求头"""
@@ -150,8 +150,9 @@ class HabitService:
             return {"error": str(e)}
     
     async def close(self):
-        """关闭HTTP客户端"""
-        await self.client.aclose()
+        """关闭HTTP客户端 - 使用共享客户端时无需关闭"""
+        # HTTP客户端由http_client_manager统一管理，无需在此关闭
+        pass
 
 
 # 全局习惯服务实例
