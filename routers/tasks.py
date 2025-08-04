@@ -3,7 +3,7 @@ from fastapi import APIRouter, HTTPException, Query, Body
 from typing import Optional
 from models import ApiResponse
 from services import dida_service
-from utils import app_logger
+from utils import app_logger, api_error_handler, success_response, auth_error_response
 
 router = APIRouter(prefix="/tasks", tags=["任务管理"])
 
@@ -12,6 +12,7 @@ router = APIRouter(prefix="/tasks", tags=["任务管理"])
             response_model=ApiResponse,
             summary="设置认证会话",
             description="设置滴答清单API的认证令牌，用于后续API调用")
+@api_error_handler("认证设置")
 async def set_auth_session(
     auth_token: str = Body(..., description="认证令牌（t cookie值）"),
     csrf_token: str = Body(..., description="CSRF令牌")
@@ -24,34 +25,23 @@ async def set_auth_session(
     
     设置后可以调用其他需要认证的API接口
     """
-    try:
-        app_logger.info("设置认证会话")
-        
-        if not auth_token or not csrf_token:
-            raise HTTPException(
-                status_code=400,
-                detail="认证令牌和CSRF令牌不能为空"
-            )
-        
-        session_id = dida_service.set_auth_session(auth_token, csrf_token)
-        
-        return ApiResponse(
-            code=200,
-            message="认证会话设置成功",
-            data={
-                "session_id": session_id,
-                "status": "已设置认证会话，可以调用其他API"
-            }
-        )
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        app_logger.error(f"设置认证会话时发生错误: {e}")
+    app_logger.info("设置认证会话")
+    
+    if not auth_token or not csrf_token:
         raise HTTPException(
-            status_code=500,
-            detail=f"设置认证会话失败: {str(e)}"
+            status_code=400,
+            detail="认证令牌和CSRF令牌不能为空"
         )
+    
+    session_id = dida_service.set_auth_session(auth_token, csrf_token)
+    
+    return success_response(
+        data={
+            "session_id": session_id,
+            "status": "已设置认证会话，可以调用其他API"
+        },
+        message="认证会话设置成功"
+    )
 
 
 @router.get("/all",

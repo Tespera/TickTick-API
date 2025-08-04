@@ -17,7 +17,7 @@ class ExportService:
     
     async def export_tasks_to_excel(self) -> Dict[str, Any]:
         """
-        导出所有任务到Excel文件
+        导出所有任务到Excel文件（优化内存使用）
         
         Returns:
             dict: 包含Excel文件内容和元数据的响应
@@ -25,11 +25,25 @@ class ExportService:
         try:
             app_logger.info("开始导出任务到Excel")
             
-            # 获取所有任务数据
-            all_tasks_data = await self._get_all_tasks_data()
-            completed_tasks_data = await self._get_completed_tasks_data()
-            abandoned_tasks_data = await self._get_abandoned_tasks_data()
-            trash_tasks_data = await self._get_trash_tasks_data()
+            # 并发获取所有任务数据，提高性能
+            import asyncio
+            tasks = [
+                self._get_all_tasks_data(),
+                self._get_completed_tasks_data(),
+                self._get_abandoned_tasks_data(), 
+                self._get_trash_tasks_data()
+            ]
+            
+            all_tasks_data, completed_tasks_data, abandoned_tasks_data, trash_tasks_data = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            # 处理可能的异常结果
+            def safe_data(data):
+                return data if not isinstance(data, Exception) else None
+                
+            all_tasks_data = safe_data(all_tasks_data)
+            completed_tasks_data = safe_data(completed_tasks_data)
+            abandoned_tasks_data = safe_data(abandoned_tasks_data)
+            trash_tasks_data = safe_data(trash_tasks_data)
 
             if not all_tasks_data and not completed_tasks_data and not abandoned_tasks_data and not trash_tasks_data:
                 return {"error": "无法获取任务数据"}
@@ -38,12 +52,14 @@ class ExportService:
             excel_buffer = io.BytesIO()
             
             with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
-                # 处理全部任务
+                # 处理全部任务（优化内存使用）
                 if all_tasks_data:
                     all_tasks_df = self._process_all_tasks(all_tasks_data)
                     if not all_tasks_df.empty:
                         all_tasks_df.to_excel(writer, sheet_name='全部任务', index=False)
                         app_logger.info(f"全部任务工作表创建完成，共 {len(all_tasks_df)} 条记录")
+                        # 释放内存
+                        del all_tasks_df
                 
                 # 处理已完成任务
                 if completed_tasks_data:
@@ -51,6 +67,8 @@ class ExportService:
                     if not completed_tasks_df.empty:
                         completed_tasks_df.to_excel(writer, sheet_name='已完成任务', index=False)
                         app_logger.info(f"已完成任务工作表创建完成，共 {len(completed_tasks_df)} 条记录")
+                        # 释放内存
+                        del completed_tasks_df
 
                 # 处理放弃任务
                 if abandoned_tasks_data:
@@ -58,6 +76,8 @@ class ExportService:
                     if not abandoned_tasks_df.empty:
                         abandoned_tasks_df.to_excel(writer, sheet_name='放弃任务', index=False)
                         app_logger.info(f"放弃任务工作表创建完成，共 {len(abandoned_tasks_df)} 条记录")
+                        # 释放内存
+                        del abandoned_tasks_df
 
                 # 处理垃圾桶任务
                 if trash_tasks_data:
@@ -65,6 +85,12 @@ class ExportService:
                     if not trash_tasks_df.empty:
                         trash_tasks_df.to_excel(writer, sheet_name='垃圾桶任务', index=False)
                         app_logger.info(f"垃圾桶任务工作表创建完成，共 {len(trash_tasks_df)} 条记录")
+                        # 释放内存
+                        del trash_tasks_df
+                
+                # 强制垃圾回收
+                import gc
+                gc.collect()
             
             excel_buffer.seek(0)
             

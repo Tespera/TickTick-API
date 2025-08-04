@@ -4,7 +4,7 @@ import time
 from typing import Optional, Dict, Any, List
 import httpx
 from utils import app_logger
-from core import config, db, urls
+from core import config, db, urls, http_client_manager
 from models import TasksResponse, TaskItem
 
 
@@ -13,7 +13,7 @@ class DidaAPIService:
     
     def __init__(self):
         self.request_config = config.get('request_config', {})
-        self.client = httpx.AsyncClient(timeout=self.request_config.get('timeout', 30.0))
+        self.client = http_client_manager.client
         
         # 从数据库获取当前活跃的认证会话
         self.current_session = None
@@ -305,8 +305,9 @@ class DidaAPIService:
             return {"error": str(e)}
 
     async def close(self):
-        """关闭HTTP客户端"""
-        await self.client.aclose()
+        """关闭HTTP客户端 - 使用共享客户端时无需关闭"""
+        # HTTP客户端由http_client_manager统一管理，无需在此关闭
+        pass
 
 
 # 全局滴答清单API服务实例
